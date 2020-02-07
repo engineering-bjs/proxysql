@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
 	if (version.data()[0] == '5') {
 		ok(var_value.compare("utf8mb4_general_ci") == 0, "Backend is mysql version < 8.0. Actual collation %s", var_value.c_str()); // ok_2
 	} else {
-		ok(var_value.compare("utf8mb4_croatian_ci") == 0, "Backend is mysql version >= 8.0. Collation is set as expected to utf8mb4_croatian_ci"); // ok_2
+		ok(var_value.compare("utf8mb4_croatian_ci") == 0, "Backend is mysql version >= 8.0. Actual collation %s",var_value.c_str()); // ok_2
 	}
 
 	mysql_close(mysql);
@@ -77,7 +77,9 @@ int main(int argc, char** argv) {
 	mysql_close(mysql_a);
 
 
-	// Now default charset is utf8mb4 and new client connection should use it by default
+	//set_admin_global_variable(mysqlAdmin, "mysql-default_charset", "utf8mb4");
+	//set_admin_global_variable(mysqlAdmin, "mysql-default_collation_connection", "latin1_swedish_ci");
+	//if (mysql_query(mysqlAdmin, "load mysql variables to runtime")) return exit_status();
 	MYSQL* mysql_b = mysql_init(NULL);
 	if (!mysql_b) return exit_status();
 	if (!mysql_real_connect(mysql_b, cl.host, cl.username, cl.password, NULL, cl.port, NULL, 0)) return exit_status();
@@ -95,6 +97,8 @@ int main(int argc, char** argv) {
 
 
 	/* check initial options */
+	//set_admin_global_variable(mysqlAdmin, "mysql-default_collation_connection", "utf8mb4_general_ci");
+	//if (mysql_query(mysqlAdmin, "load mysql variables to runtime")) return exit_status();
 	MYSQL * mysql_c = mysql_init(NULL);
 	if (!mysql_c) return exit_status();
 	if (mysql_options(mysql_c, MYSQL_SET_CHARSET_NAME, "utf8mb4")) return exit_status();

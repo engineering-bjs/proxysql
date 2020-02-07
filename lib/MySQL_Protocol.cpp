@@ -6,6 +6,9 @@
 #include "MySQL_Data_Stream.h"
 #include "MySQL_Authentication.hpp"
 #include "MySQL_LDAP_Authentication.hpp"
+#include "MySQL_Variables.h"
+
+#include <sstream>
 
 extern MySQL_Authentication *GloMyAuth;
 extern MySQL_LDAP_Authentication *GloMyLdapAuth;
@@ -1214,15 +1217,13 @@ bool MySQL_Protocol::generate_pkt_initial_handshake(bool send, void **ptr, unsig
 	(*myds)->myconn->options.server_capabilities=mysql_thread___server_capabilities;
   memcpy(_ptr+l,&mysql_thread___server_capabilities, sizeof(mysql_thread___server_capabilities)/2); l+=sizeof(mysql_thread___server_capabilities)/2;
   const MARIADB_CHARSET_INFO *ci = NULL;
-  int nr = 33; // if configuration is wrong use utf8_general_ci
   ci = proxysql_find_charset_name(mysql_thread___default_variables[SQL_CHARACTER_SET]);
-  if (ci) {
-	nr = ci->nr;
-  } else {
+  if (!ci) {
 	  proxy_error("Cannot find character set for name [%s]. Configuration error. Check [%s] global variable.\n",
 			  mysql_thread___default_variables[SQL_CHARACTER_SET], mysql_tracked_variables[SQL_CHARACTER_SET].internal_variable_name);
+	  assert(0);
   }
-  uint8_t uint8_charset = nr & 255;
+  uint8_t uint8_charset = ci->nr & 255;
   memcpy(_ptr+l,&uint8_charset, sizeof(uint8_charset)); l+=sizeof(uint8_charset);
   memcpy(_ptr+l,&server_status, sizeof(server_status)); l+=sizeof(server_status);
   memcpy(_ptr+l,"\x8f\x80\x15",3); l+=3;
@@ -1569,15 +1570,12 @@ bool MySQL_Protocol::process_pkt_handshake_response(unsigned char *pkt, unsigned
 	// see bug #810
 	if (charset==0) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
-		int nr = 33; // if configuration is wrong then use utf8_general_ci
 		ci = proxysql_find_charset_name(mysql_thread___default_variables[SQL_CHARACTER_SET]);
-		if (ci) {
-			nr = ci->nr;
-		} else {
-			proxy_error("Cannot find character set for name [%s]. Configuration error. Check [%s] global variable.\n",
-					mysql_thread___default_variables[SQL_CHARACTER_SET], mysql_tracked_variables[SQL_CHARACTER_SET].internal_variable_name);
+		if (!ci) {
+			proxy_error("Cannot find charset [%s]\n", mysql_thread___default_variables[SQL_CHARACTER_SET]);
+			assert(0);
 		}
-		charset=nr;
+		charset=ci->nr;
 	}
 	(*myds)->tmp_charset=charset;
 	pkt     += 24;
@@ -1972,6 +1970,14 @@ __exit_do_auth:
 	myconn=sess->client_myds->myconn;
 	assert(myconn);
 	myconn->set_charset(charset, CONNECT_START);
+	{
+		std::stringstream ss;
+		ss << charset;
+		sess->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
+		sess->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+	}
+	if (sess->mysql_variables)
+		proxy_warning("TRACE : LOGIN charset server %s, client %s, handshake %d\n", sess->mysql_variables->server_get_value(SQL_CHARACTER_SET), sess->mysql_variables->client_get_value(SQL_CHARACTER_SET), charset);
 	// enable compression
 	if (capabilities & CLIENT_COMPRESS) {
 		if (myconn->options.server_capabilities & CLIENT_COMPRESS) {

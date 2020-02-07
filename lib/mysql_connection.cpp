@@ -16,11 +16,19 @@ void Variable::fill_server_internal_session(json &j, int conn_num, int idx) {
 	if (idx == SQL_CHARACTER_SET_RESULTS) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
+		if (!ci) {
+			proxy_error("Cannot find charset %s\n", value);
+			assert(0);
+		}
 
 		j["backends"][conn_num]["conn"][mysql_tracked_variables[idx].internal_variable_name] = std::string((ci && ci->csname)?ci->csname:"");
 	} else if (idx == SQL_COLLATION_CONNECTION) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
+		if (!ci) {
+			proxy_error("Cannot find charset %s\n", value);
+			assert(0);
+		}
 
 		j["backends"][conn_num]["conn"][mysql_tracked_variables[idx].internal_variable_name] = std::string((ci && ci->name)?ci->name:"");
 	} else {
@@ -32,11 +40,20 @@ void Variable::fill_client_internal_session(json &j, int idx) {
 	if (idx == SQL_CHARACTER_SET_RESULTS) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
+		if (!ci) {
+			proxy_error("Cannot find charset %s\n", value);
+			assert(0);
+		}
+
 		j["conn"][mysql_tracked_variables[idx].internal_variable_name] = (ci && ci->csname)?ci->csname:"";
 
 	} else if (idx == SQL_COLLATION_CONNECTION) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
+		if (!ci) {
+			proxy_error("Cannot find charset %s\n", value);
+			assert(0);
+		}
 
 		j["conn"][mysql_tracked_variables[idx].internal_variable_name] = (ci && ci->name)?ci->name:"";
 	} else {
@@ -542,7 +559,7 @@ bool MySQL_Connection::match_tracked_options(MySQL_Connection *c) {
 }
 
 // non blocking API
-void MySQL_Connection::connect_start(const char* csname) {
+void MySQL_Connection::connect_start() {
 	PROXY_TRACE();
 	mysql=mysql_init(NULL);
 	assert(mysql);
@@ -553,7 +570,12 @@ void MySQL_Connection::connect_start(const char* csname) {
 		mysql_ssl_set(mysql, mysql_thread___ssl_p2s_key, mysql_thread___ssl_p2s_cert, mysql_thread___ssl_p2s_ca, NULL, mysql_thread___ssl_p2s_cipher);
 	}
 	unsigned int timeout= 1;
+	const char *csname = NULL;
 	mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (void *)&timeout);
+	if (myds && myds->sess) {
+		csname = myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_SET);
+	}
+
 	const MARIADB_CHARSET_INFO * c = NULL;
 	if (csname)
 		c = proxysql_find_charset_nr(atoi(csname));
@@ -564,7 +586,9 @@ void MySQL_Connection::connect_start(const char* csname) {
 		proxy_error("Not existing charset number %s\n", mysql_thread___default_variables[SQL_CHARACTER_SET]);
 		assert(0);
 	}
-	set_charset(c->nr, CONNECT_START);
+	proxy_warning("TRACE : INITIAL ACTION client %s, server %s\n", myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_ACTION), myds->sess->mysql_variables->server_get_value(SQL_CHARACTER_ACTION));
+	set_charset(c->nr, (charset_action)atoi(myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_ACTION)));
+	//set_charset(c->nr, CONNECT_START);
 	mysql_options(mysql, MYSQL_SET_CHARSET_NAME, c->csname);
 	unsigned long client_flags = 0;
 	//if (mysql_thread___client_found_rows)
@@ -697,6 +721,7 @@ void MySQL_Connection::set_names_start() {
 		proxy_error("Not existing charset number %u\n", atoi(myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_SET)));
 		assert(0);
 	}
+	proxy_warning("TRACE : START SET NAMES %s\n", myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_SET));
 	async_exit_status = mysql_set_character_set_start(&interr,mysql, NULL, atoi(myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_SET)));
 }
 
@@ -719,6 +744,7 @@ void MySQL_Connection::set_query(char *stmt, unsigned long length) {
 void MySQL_Connection::real_query_start() {
 	PROXY_TRACE();
 	async_exit_status = mysql_real_query_start(&interr , mysql, query.ptr, query.length);
+	proxy_warning("TRACE : START SET %s\n", query.ptr);
 }
 
 void MySQL_Connection::real_query_cont(short event) {
@@ -787,7 +813,7 @@ void MySQL_Connection::set_is_client() {
 
 #define NEXT_IMMEDIATE(new_st) do { async_state_machine = new_st; goto handler_again; } while (0)
 
-MDB_ASYNC_ST MySQL_Connection::handler(short event, const char* csname) {
+MDB_ASYNC_ST MySQL_Connection::handler(short event) {
 	unsigned long long processed_bytes=0;	// issue #527 : this variable will store the amount of bytes processed during this event
 	if (mysql==NULL) {
 		// it is the first time handler() is being called
@@ -803,7 +829,7 @@ handler_again:
 	proxy_debug(PROXY_DEBUG_MYSQL_PROTOCOL, 6,"async_state_machine=%d\n", async_state_machine);
 	switch (async_state_machine) {
 		case ASYNC_CONNECT_START:
-			connect_start(csname);
+			connect_start();
 			if (async_exit_status) {
 				next_event(ASYNC_CONNECT_CONT);
 			} else {

@@ -3274,42 +3274,36 @@ MySQL_Session * MySQL_Thread::create_new_session_and_client_data_stream(int _fd)
 	for (int i=0; i<SQL_NAME_LAST; i++) {
 		if (i == SQL_CHARACTER_SET) {
 			const MARIADB_CHARSET_INFO *ci = NULL;
-			int nr = 33; // if configuration has an error then use utf8_general_ci
 			ci = proxysql_find_charset_name(mysql_thread___default_variables[i]);
-			if (ci) {
-				nr = ci->nr;
-			} else {
+			if (!ci) {
 				proxy_error("Cannot find character set for name [%s]. Configuration error. Check [%s] global variable. Using character set 33.\n", 
 						mysql_thread___default_variables[SQL_CHARACTER_SET], mysql_tracked_variables[SQL_CHARACTER_SET].internal_variable_name);
+				assert(0);
 			}
 			std::stringstream ss;
-			ss << nr;
+			ss << ci->nr;
 			sess->mysql_variables->client_set_value(i, ss.str());
 		} else if (i == SQL_CHARACTER_SET_RESULTS) {
 			const MARIADB_CHARSET_INFO *ci = NULL;
-			int nr = 33; // if configuration has an error then use utf8_general_ci
 			ci = proxysql_find_charset_name(mysql_thread___default_variables[i]);
-			if (ci) {
-				nr = ci->nr;
-			} else {
+			if (!ci) {
 				proxy_error("Cannot find character set for name [%s]. Configuration error. Check [%s] global variable. Using character set 33.\n", 
 						mysql_thread___default_variables[SQL_CHARACTER_SET_RESULTS], mysql_tracked_variables[SQL_CHARACTER_SET_RESULTS].internal_variable_name);
+				assert(0);
 			}
 			std::stringstream ss;
-			ss << nr;
+			ss << ci->nr;
 			sess->mysql_variables->client_set_value(i, ss.str());
 		} else if (i == SQL_COLLATION_CONNECTION) {
 			const MARIADB_CHARSET_INFO *ci = NULL;
-			int nr = 33; // if configuration has an error then use utf8_general_ci
 			ci = proxysql_find_charset_collate(mysql_thread___default_variables[i]);
-			if (ci) {
-				nr = ci->nr;
-			} else {
+			if (!ci) {
 				proxy_error("Cannot find character set for name [%s]. Configuration error. Check [%s] global variable. Using character set 33.\n", 
 						mysql_thread___default_variables[SQL_COLLATION_CONNECTION], mysql_tracked_variables[SQL_COLLATION_CONNECTION].internal_variable_name);
+				assert(0);
 			}
 			std::stringstream ss;
-			ss << nr;
+			ss << ci->nr;
 			sess->mysql_variables->client_set_value(i, ss.str());
 		} else {
 			sess->mysql_variables->client_set_value(i, mysql_thread___default_variables[i]);

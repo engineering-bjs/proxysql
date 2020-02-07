@@ -148,12 +148,14 @@ void dumpResult(MYSQL_RES *result) {
 }
 
 void queryVariables(MYSQL *mysql, json& j) {
-	char *query = (char*)"SELECT * FROM performance_schema.session_variables WHERE variable_name IN "
+	std::stringstream query;
+	query << "SELECT /* mysql " << mysql << " */ * FROM performance_schema.session_variables WHERE variable_name IN "
 		" ('hostname', 'sql_log_bin', 'sql_mode', 'init_connect', 'time_zone', 'autocommit', 'sql_auto_is_null', "
 		" 'sql_safe_updates', 'session_track_gtids', 'max_join_size', 'net_write_timeout', 'sql_select_limit', "
 		" 'sql_select_limit', 'character_set_results', 'transaction_isolation', 'transaction_read_only', 'session_track_gtids', "
 		" 'sql_auto_is_null', 'collation_connection');";
-	if (mysql_query(mysql, query)) {
+	//fprintf(stderr, "TRACE : QUERY 3 : variables %s\n", query.str().c_str());
+	if (mysql_query(mysql, query.str().c_str())) {
 		if (silent==0) {
 			fprintf(stderr,"%s\n", mysql_error(mysql));
 		}
@@ -169,6 +171,7 @@ void queryVariables(MYSQL *mysql, json& j) {
 void queryInternalStatus(MYSQL *mysql, json& j) {
 	char *query = (char*)"PROXYSQL INTERNAL SESSION";
 
+	//fprintf(stderr, "TRACE : QUERY 4 : variables %s\n", query);
 	if (mysql_query(mysql, query)) {
 		if (silent==0) {
 			fprintf(stderr,"%s\n", mysql_error(mysql));
@@ -346,6 +349,8 @@ void * my_conn_thread(void *arg) {
 			vars = varsperconn[r1];
 		}
 
+		//fprintf(stderr, "TRACE : ====== START QUERIES %p\n", mysql);
+		//fprintf(stderr, "TRACE : QUERY 1 : %s\n", testCases[r2].command.c_str());
 		if (mysql_query(mysql, testCases[r2].command.c_str())) {
 			if (silent==0) {
 				fprintf(stderr,"%s\n", mysql_error(mysql));
@@ -356,6 +361,7 @@ void * my_conn_thread(void *arg) {
 			select_OK++;
 			__sync_fetch_and_add(&g_select_OK,1);
 		}
+
 		for (auto& el : testCases[r2].expected_vars.items()) {
 			vars[el.key()] = el.value();
 		}
@@ -364,7 +370,8 @@ void * my_conn_thread(void *arg) {
 		usleep(sleepDelay * 1000);
 
 		char query[128];
-		sprintf(query, "SELECT %d;", sleepDelay);
+		sprintf(query, "SELECT /* %p */ %d;", mysql, sleepDelay);
+		//fprintf(stderr, "TRACE : QUERY 2 : %s\n", query);
 		if (mysql_query(mysql,query)) {
 			select_ERR++;
 			__sync_fetch_and_add(&g_select_ERR,1);
@@ -399,11 +406,13 @@ void * my_conn_thread(void *arg) {
 				testPassed = false;
 				fprintf(stderr, "Test failed for this case %s->%s.\n\nmysql data %s\n\n proxysql data %s\n\n csv data %s\n\n\n",
 						el.value().dump().c_str(), el.key().c_str(), mysql_vars.dump().c_str(), proxysql_vars.dump().c_str(), vars.dump().c_str());
-				ok(testPassed, "Command : %s", testCases[r2].command.c_str());
+				ok(testPassed, "Command : mysql %p, %s", mysql, testCases[r2].command.c_str());
+				//fprintf(stderr, "TRACE : ====== END QUERIES ERROR %p\n", mysql);
 				exit(0);
 			}
 		}
-		ok(testPassed, "Command : %s", testCases[r2].command.c_str());
+		ok(testPassed, "Command : mysql %p, %s", mysql, testCases[r2].command.c_str());
+		//fprintf(stderr, "TRACE : ====== END QUERIES %p\n", mysql);
 	}
 	__sync_fetch_and_add(&query_phase_completed,1);
 
@@ -429,10 +438,10 @@ int main(int argc, char *argv[]) {
 
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' where variable_name='mysql-default_sql_mode'");
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='OFF' where variable_name='mysql-default_sql_safe_update'");
-	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='NULL' where variable_name='mysql-default_character_set_results'");
+	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='UTF8' where variable_name='mysql-default_character_set_results'");
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='REPEATABLE READ' where variable_name='mysql-default_isolation_level'");
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='REPEATABLE READ' where variable_name='mysql-default_tx_isolation'");
-	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='utf8mb4_general_ci' where variable_name='mysql-default_collation_connection'");
+	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='utf8_general_ci' where variable_name='mysql-default_collation_connection'");
 	MYSQL_QUERY(mysqladmin, "load mysql variables to runtime");
 
 

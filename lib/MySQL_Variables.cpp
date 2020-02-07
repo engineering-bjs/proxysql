@@ -74,6 +74,7 @@ uint32_t MySQL_Variables::client_get_hash(int idx) {
 }
 
 void MySQL_Variables::server_set_value(int idx, const char* value) {
+	if (!session || !session->mybe || !session->mybe->server_myds || !session->mybe->server_myds->myconn) return;
 	session->mybe->server_myds->myconn->variables[idx].hash = SpookyHash::Hash32(value,strlen(value),10);
 
 	if (session->mybe->server_myds->myconn->variables[idx].value) {
@@ -83,6 +84,7 @@ void MySQL_Variables::server_set_value(int idx, const char* value) {
 }
 
 const char* MySQL_Variables::server_get_value(int idx) {
+	if (!session || !session->mybe || !session->mybe->server_myds || !session->mybe->server_myds->myconn) return NULL;
 	return session->mybe->server_myds->myconn->variables[idx].value;
 }
 
@@ -129,6 +131,7 @@ bool MySQL_Variables::verify_generic_variable(uint32_t *be_int, char **be_var, c
 					session->previous_status.push(PROCESSING_STMT_EXECUTE);
 					break;
 				default:
+					proxy_error("Wrong status %d\n", session->status);
 					assert(0);
 					break;
 			}
@@ -156,10 +159,6 @@ bool MySQL_Variables::verify_variable(int idx) {
 	auto ret = false;
 	if (updaters[idx] && updaters[idx])
 		ret = updaters[idx]->verify_variables(session, idx);
-	if (ret) {
-		// FIXME
-		// update_variable(mysql_tracked_variables[idx].status, rc);
-	}
 	return ret;
 }
 
@@ -207,7 +206,8 @@ bool Generic_Updater::update_server_variable(MySQL_Session* session, int idx, in
 
 bool Names_Updater::verify_variables(MySQL_Session* session, int idx) {
 	if (!strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "1") ||
-			!strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "3")) {
+			!strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "3") ||
+			!strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "0")) {
 
 		auto ret = session->mysql_variables->verify_generic_variable(
 				&session->mybe->server_myds->myconn->variables[SQL_CHARACTER_SET].hash,
@@ -218,28 +218,18 @@ bool Names_Updater::verify_variables(MySQL_Session* session, int idx) {
 				mysql_tracked_variables[idx].status
 				);
 
-		if (ret) {
-			auto should_update_results = false;
-			auto server = session->mybe->server_myds->myconn->variables[SQL_CHARACTER_SET_RESULTS].value;
-			auto client = session->client_myds->myconn->variables[SQL_CHARACTER_SET_RESULTS].value;
+		if (ret && !strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "0")) {
+			return ret;
+		}
 
-			if (server && client && !strcmp(server, client))
-				should_update_results = true;
-
-			if (should_update_results) {
-				session->mysql_variables->server_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
-			}
-
-			server = session->mybe->server_myds->myconn->variables[SQL_COLLATION_CONNECTION].value;
-			client = session->client_myds->myconn->variables[SQL_COLLATION_CONNECTION].value;
-
-			if (server && client && !strcmp(server, client))
-				should_update_results = true;
-
-			if (should_update_results) {
-				session->mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
-			}
-
+		if (ret && !strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "1")) {
+			session->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+			session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+			return ret;
+		}
+		if (ret && !strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "3")) {
+			session->mysql_variables->server_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+			session->mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			return ret;
 		}
 
@@ -277,6 +267,7 @@ bool Charset_Updater::verify_variables(MySQL_Session* session, int idx) {
 	if (ret) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		session->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+		session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, session->mysql_variables->server_get_value(SQL_COLLATION_CONNECTION));
 		return ret;
 	}
 
