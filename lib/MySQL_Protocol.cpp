@@ -1974,6 +1974,7 @@ __exit_do_auth:
 		std::stringstream ss;
 		ss << charset;
 		sess->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
+		sess->mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
 		sess->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
 	}
 	if (sess->mysql_variables)

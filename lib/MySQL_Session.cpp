@@ -1301,7 +1301,18 @@ bool MySQL_Session::handler_special_queries(PtrSize_t *pkt) {
 			std::stringstream ss;
 			ss << c->nr;
 			mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
+			mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
 			mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+//			if ( !strcmp("45", ss.str().c_str()) && 0 /*mybe->server_myds->myconn->mysql->server_version[0] == '8'*/) {
+//				// FIXME : There is possibility that mybe == NULL. How can we find mysql server version in this case?????
+//				proxy_warning("TRACE : CHANGE COLLATION CONNECTION to 255\n");
+//				mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, "255");
+//				mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+//			}
+//			else {
+				mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+//			}
+			proxy_warning("TRACE : HANDLE SPECIAL QUERY\n");
 			unsigned int nTrx=NumActiveTransactions();
 			uint16_t setStatus = (nTrx ? SERVER_STATUS_IN_TRANS : 0 );
 			if (autocommit) setStatus |= SERVER_STATUS_AUTOCOMMIT;
@@ -2588,6 +2599,7 @@ bool MySQL_Session::handler_again___status_CHANGING_CHARSET(int *_rc) {
 				ss << replace_collation_nr;
 				mysql_variables->client_set_value(SQL_CHARACTER_SET, ss.str());
 				mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str());
+				mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str());
 				mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str());
 				break;
 			case HANDLE_UNKNOWN_CHARSET__REPLACE_WITH_DEFAULT:
@@ -4120,6 +4132,7 @@ handler_again:
 		case SETTING_SQL_SAFE_UPDATES:
 		case SETTING_TIME_ZONE:
 		case SETTING_CHARACTER_SET_RESULTS:
+		case SETTING_CHARACTER_SET_CONNECTION:
 		case SETTING_ISOLATION_LEVEL:
 		case SETTING_TRANSACTION_READ:
 		case SETTING_SESSION_TRACK_GTIDS:
@@ -5222,7 +5235,7 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 							unable_to_parse_set_statement(lock_hostgroup);
 							return false;
 						}
-					} else if ( (var == "character_set_results") || ( var == "collation_connection" ) ) {
+					} else if ( (var == "character_set_results") || ( var == "collation_connection" )  || (var == "character_set_connection")) {
 						std::string value1 = *values;
 						int vl = strlen(value1.c_str());
 						const char *v = value1.c_str();
@@ -5249,20 +5262,32 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 							}
 							if (mysql_variables->client_get_hash(idx) != var_value_int) {
 								const MARIADB_CHARSET_INFO *ci = NULL;
-								if (var == "character_set_results")
+								if (var == "character_set_results" || var == "character_set_connection") {
 									ci = proxysql_find_charset_name(value1.c_str());
+								}
 								else if (var == "collation_connection")
 									ci = proxysql_find_charset_collate(value1.c_str());
 
 								if (!ci) {
-									proxy_error("Cannot find charset/collation [%s]\n", value1.c_str());
-									assert(0);
-								}
+									if (!strcasecmp("NULL", value1.c_str())) {
+										mysql_variables->client_set_value(idx, "-1");
+									} else if (!strcasecmp("binary", value1.c_str())) {
+										mysql_variables->client_set_value(idx, "-2");
+									} else {
+										proxy_error("Cannot find charset/collation [%s]\n", value1.c_str());
+										assert(0);
+									}
+								} else {
+									std::stringstream ss;
+									ss << ci->nr;
+									if (var == "collation_connection")
+										mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
+									if (var == "character_set_connection")
+										mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
 
-								std::stringstream ss;
-								ss << ci->nr;
-								mysql_variables->client_set_value(idx, ss.str().c_str());
-								proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Changing connection %s to %s\n", var.c_str(), value1.c_str());
+									mysql_variables->client_set_value(idx, ss.str().c_str());
+									proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Changing connection %s to %s\n", var.c_str(), value1.c_str());
+								}
 							}
 							exit_after_SetParse = true;
 						} else {
@@ -5310,7 +5335,7 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 							std::stringstream ss;
 							ss << c->nr;
 							mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
-							mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+							mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
 							proxy_warning("TARCE : SET NAMES new %s, results new %s\n", ss.str().c_str(), ss.str().c_str());
 							exit_after_SetParse = true;
 						}
@@ -5497,7 +5522,6 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 					std::stringstream ss;
 					ss << c->nr;
 					mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
-					mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
 					exit_after_SetParse = true;
 				}
 				if (exit_after_SetParse) {
@@ -5903,7 +5927,9 @@ void MySQL_Session::handler___client_DSS_QUERY_SENT___server_DSS_NOT_INITIALIZED
 		proxy_warning("TRACE : CONNECTING SERVER CHARSET server %s, cient %s\n", mysql_variables->server_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_CHARACTER_SET));
 		proxy_warning("TRACE : CONNECTING SERVER ACTION server %s, cient %s\n", mysql_variables->server_get_value(SQL_CHARACTER_ACTION), mysql_variables->client_get_value(SQL_CHARACTER_ACTION));
 		proxy_warning("TRACE : CONNECTING SERVER RESULTS server %s, cient %s\n", mysql_variables->server_get_value(SQL_CHARACTER_SET_RESULTS), mysql_variables->client_get_value(SQL_CHARACTER_SET_RESULTS));
-		proxy_warning("TRACE : CONNECTING SERVER COLLATION server %s, cient %s\n", mysql_variables->server_get_value(SQL_COLLATION_CONNECTION), mysql_variables->client_get_value(SQL_COLLATION_CONNECTION));
+		proxy_warning("TRACE : CONNECTING SERVER CHARACTER_SET_CONNECTION server %s, cient %s\n", mysql_variables->server_get_value(SQL_CHARACTER_SET_CONNECTION), mysql_variables->client_get_value(SQL_CHARACTER_SET_CONNECTION));
+		proxy_warning("TRACE : CONNECTING SERVER COLLATION_CONNECTION server %s, cient %s\n", mysql_variables->server_get_value(SQL_COLLATION_CONNECTION), mysql_variables->client_get_value(SQL_COLLATION_CONNECTION));
+
 		if (!(!strcmp("2", mysql_variables->client_get_value(SQL_CHARACTER_ACTION)) && !strcmp("0", mysql_variables->server_get_value(SQL_CHARACTER_ACTION)))) {
 			mysql_variables->server_set_value(SQL_CHARACTER_ACTION, "0");
 			mysql_variables->client_set_value(SQL_CHARACTER_ACTION, "0");
@@ -5911,6 +5937,7 @@ void MySQL_Session::handler___client_DSS_QUERY_SENT___server_DSS_NOT_INITIALIZED
 
 		if (strcmp(mysql_variables->client_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_COLLATION_CONNECTION))) {
 			mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, mysql_variables->client_get_value(SQL_CHARACTER_SET));
+			mysql_variables->server_set_value(SQL_CHARACTER_SET_CONNECTION, mysql_variables->client_get_value(SQL_CHARACTER_SET));
 		}
 
 		if (strcmp(mysql_variables->client_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_CHARACTER_SET_RESULTS))) {

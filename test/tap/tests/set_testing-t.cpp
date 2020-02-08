@@ -109,6 +109,7 @@ unsigned int connect_phase_completed = 0;
 unsigned int query_phase_completed = 0;
 
 __thread int g_seed;
+std::mutex mtx_;
 
 inline int fastrand() {
 	g_seed = (214013*g_seed+2531011);
@@ -153,7 +154,7 @@ void queryVariables(MYSQL *mysql, json& j) {
 		" ('hostname', 'sql_log_bin', 'sql_mode', 'init_connect', 'time_zone', 'autocommit', 'sql_auto_is_null', "
 		" 'sql_safe_updates', 'session_track_gtids', 'max_join_size', 'net_write_timeout', 'sql_select_limit', "
 		" 'sql_select_limit', 'character_set_results', 'transaction_isolation', 'transaction_read_only', 'session_track_gtids', "
-		" 'sql_auto_is_null', 'collation_connection');";
+		" 'sql_auto_is_null', 'collation_connection', 'character_set_connection');";
 	//fprintf(stderr, "TRACE : QUERY 3 : variables %s\n", query.str().c_str());
 	if (mysql_query(mysql, query.str().c_str())) {
 		if (silent==0) {
@@ -406,18 +407,22 @@ void * my_conn_thread(void *arg) {
 				testPassed = false;
 				fprintf(stderr, "Test failed for this case %s->%s.\n\nmysql data %s\n\n proxysql data %s\n\n csv data %s\n\n\n",
 						el.value().dump().c_str(), el.key().c_str(), mysql_vars.dump().c_str(), proxysql_vars.dump().c_str(), vars.dump().c_str());
-				ok(testPassed, "Command : mysql %p, %s", mysql, testCases[r2].command.c_str());
+				ok(testPassed, "mysql connection [%p], command [%s]", mysql, testCases[r2].command.c_str());
 				//fprintf(stderr, "TRACE : ====== END QUERIES ERROR %p\n", mysql);
 				exit(0);
 			}
 		}
-		ok(testPassed, "Command : mysql %p, %s", mysql, testCases[r2].command.c_str());
+		{
+			std::lock_guard<std::mutex> lock(mtx_);
+			ok(testPassed, "mysql connection [%p], command [%s]", mysql, testCases[r2].command.c_str());
+		}
 		//fprintf(stderr, "TRACE : ====== END QUERIES %p\n", mysql);
 	}
 	__sync_fetch_and_add(&query_phase_completed,1);
 
 	return NULL;
 }
+
 
 int main(int argc, char *argv[]) {
 	CommandLine cl;
@@ -442,6 +447,7 @@ int main(int argc, char *argv[]) {
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='REPEATABLE READ' where variable_name='mysql-default_isolation_level'");
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='REPEATABLE READ' where variable_name='mysql-default_tx_isolation'");
 	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='utf8_general_ci' where variable_name='mysql-default_collation_connection'");
+	MYSQL_QUERY(mysqladmin, "update global_variables set variable_value='true' where variable_name='mysql-enforce_autocommit_on_reads'");
 	MYSQL_QUERY(mysqladmin, "load mysql variables to runtime");
 
 

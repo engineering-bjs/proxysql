@@ -155,6 +155,7 @@ enum variable_name {
 	SQL_SQL_MODE,
 	SQL_TIME_ZONE,
 	SQL_CHARACTER_SET_RESULTS,
+	SQL_CHARACTER_SET_CONNECTION,
 	SQL_ISOLATION_LEVEL,
 	SQL_TRANSACTION_READ,
 	SQL_SESSION_TRACK_GTIDS,
@@ -188,6 +189,7 @@ enum session_status {
 	SETTING_ISOLATION_LEVEL,
 	SETTING_TRANSACTION_READ,
 	SETTING_CHARACTER_SET_RESULTS,
+	SETTING_CHARACTER_SET_CONNECTION,
 	SETTING_SESSION_TRACK_GTIDS,
 	SETTING_SQL_AUTO_IS_NULL,
 	SETTING_SQL_SELECT_LIMIT,
@@ -975,14 +977,15 @@ extern __thread unsigned int g_seed;
 // field_7: variable name as displayed in admin , WITHOUT "default_"
 // field_8: default value
 mysql_variable_st mysql_tracked_variables[] {
-    { SQL_CHARACTER_SET, SETTING_CHARSET,                       false, true, false, (char *)"CHARSET", (char *)"CHARSET", (char *)"UTF8" } ,
+    { SQL_CHARACTER_SET, SETTING_CHARSET,                       false, true, false, (char *)"CHARSET", (char *)"CHARSET", (char *)"UTF8" } , // should be before SQL_CHARACTER_SET_RESULTS
     { SQL_CHARACTER_ACTION, NONE,		                        false, false, false, (char *)"action", (char *)"action", (char *)"1" } ,
     { SQL_SET_NAMES, SETTING_SET_NAMES,	                        false, false, false, (char *)"names", (char *)"names", (char *)"DEFAULT" } ,
 	{ SQL_SAFE_UPDATES, SETTING_SQL_SAFE_UPDATES ,              true,  false, false, (char *)"sql_safe_updates",  (char *)"sql_safe_updates", (char *)"OFF" } ,
     { SQL_SELECT_LIMIT, SETTING_SQL_SELECT_LIMIT ,              false,  false, false, (char *)"sql_select_limit", (char *)"sql_select_limit", (char *)"DEFAULT" } ,
 	{ SQL_SQL_MODE, SETTING_SQL_MODE ,                          true, false, false, (char *)"sql_mode" , (char *)"sql_mode" , (char *)"" } ,
     { SQL_TIME_ZONE, SETTING_TIME_ZONE ,                        true, false, false, (char *)"time_zone", (char *)"time_zone", (char *)"SYSTEM" } ,
-	{ SQL_CHARACTER_SET_RESULTS, SETTING_CHARACTER_SET_RESULTS, true,  false, false, (char *)"character_set_results", (char *)"character_set_results", (char *)"UTF8" } ,
+	{ SQL_CHARACTER_SET_RESULTS, SETTING_CHARACTER_SET_RESULTS, false,  false, false, (char *)"character_set_results", (char *)"character_set_results", (char *)"UTF8" } ,
+	{ SQL_CHARACTER_SET_CONNECTION, SETTING_CHARACTER_SET_CONNECTION, false,  false, false, (char *)"character_set_connection", (char *)"character_set_connection", (char *)"UTF8" } , // should be before SQL_COLLATION_CONNECTION
 	{ SQL_ISOLATION_LEVEL, SETTING_ISOLATION_LEVEL,             false, true,  true,  (char *)"SESSION TRANSACTION ISOLATION LEVEL", (char *)"isolation_level", (char *)"READ COMMITTED" } ,
 	{ SQL_TRANSACTION_READ, SETTING_TRANSACTION_READ,           false, true,  true,  (char *)"SESSION TRANSACTION READ", (char *)"transaction_read", (char *)"WRITE" } ,
 	{ SQL_SESSION_TRACK_GTIDS, SETTING_SESSION_TRACK_GTIDS,     true, false, false, (char *)"session_track_gtids" , (char *)"session_track_gtids" , (char *)"OFF" } ,

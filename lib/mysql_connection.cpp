@@ -13,11 +13,11 @@ extern const MARIADB_CHARSET_INFO * proxysql_find_charset_nr(unsigned int nr);
 MARIADB_CHARSET_INFO * proxysql_find_charset_name(const char *name);
 
 void Variable::fill_server_internal_session(json &j, int conn_num, int idx) {
-	if (idx == SQL_CHARACTER_SET_RESULTS) {
+	if (idx == SQL_CHARACTER_SET_RESULTS || idx == SQL_CHARACTER_SET_CONNECTION) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
 		if (!ci) {
-			proxy_error("Cannot find charset %s\n", value);
+			proxy_error("Cannot find charset [%s] for variables %d\n", value, idx);
 			assert(0);
 		}
 
@@ -26,7 +26,7 @@ void Variable::fill_server_internal_session(json &j, int conn_num, int idx) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
 		if (!ci) {
-			proxy_error("Cannot find charset %s\n", value);
+			proxy_error("Cannot find charset [%s] for variable %d\n", value, idx);
 			assert(0);
 		}
 
@@ -37,11 +37,11 @@ void Variable::fill_server_internal_session(json &j, int conn_num, int idx) {
 }
 
 void Variable::fill_client_internal_session(json &j, int idx) {
-	if (idx == SQL_CHARACTER_SET_RESULTS) {
+	if (idx == SQL_CHARACTER_SET_RESULTS || idx == SQL_CHARACTER_SET_CONNECTION) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
 		if (!ci) {
-			proxy_error("Cannot find charset %s\n", value);
+			proxy_error("Cannot find charset [%s] for variables %d\n", value, idx);
 			assert(0);
 		}
 
@@ -51,7 +51,6 @@ void Variable::fill_client_internal_session(json &j, int idx) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(value));
 		if (!ci) {
-			proxy_error("Cannot find charset %s\n", value);
 			assert(0);
 		}
 
