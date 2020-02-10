@@ -154,7 +154,7 @@ void queryVariables(MYSQL *mysql, json& j) {
 		" ('hostname', 'sql_log_bin', 'sql_mode', 'init_connect', 'time_zone', 'autocommit', 'sql_auto_is_null', "
 		" 'sql_safe_updates', 'session_track_gtids', 'max_join_size', 'net_write_timeout', 'sql_select_limit', "
 		" 'sql_select_limit', 'character_set_results', 'transaction_isolation', 'transaction_read_only', 'session_track_gtids', "
-		" 'sql_auto_is_null', 'collation_connection', 'character_set_connection');";
+		" 'sql_auto_is_null', 'collation_connection', 'character_set_connection', 'character_set_client', 'character_set_database');";
 	//fprintf(stderr, "TRACE : QUERY 3 : variables %s\n", query.str().c_str());
 	if (mysql_query(mysql, query.str().c_str())) {
 		if (silent==0) {

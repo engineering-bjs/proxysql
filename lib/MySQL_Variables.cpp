@@ -22,6 +22,8 @@ MySQL_Variables::MySQL_Variables(MySQL_Session* _session) {
 		case SQL_TIME_ZONE:
 		case SQL_CHARACTER_SET_RESULTS:
 		case SQL_CHARACTER_SET_CONNECTION:
+		case SQL_CHARACTER_SET_CLIENT:
+		case SQL_CHARACTER_SET_DATABASE:
 		case SQL_ISOLATION_LEVEL:
 		case SQL_TRANSACTION_READ:
 		case SQL_SESSION_TRACK_GTIDS:
@@ -210,28 +212,22 @@ bool Generic_Updater::update_server_variable(MySQL_Session* session, int idx, in
 		std::stringstream ss;
 		ss << ci->nr;
 
-		if ( !strcmp("45", ss.str().c_str()) && session->mybe->server_myds->myconn->mysql->server_version[0] == '8') {
-			// FIXME : There is possibility that mybe == NULL. How can we find mysql server version in this case?????
-			session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, "255");
-			session->mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
-			ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, "utf8mb4_0900_ai_ci",  no_quote, st);
-		}
-		else {
-			session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
-			ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, ci->name, no_quote, st);
-		}
-
+		ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, ci->name, no_quote, st);
 	} else if (idx==SQL_CHARACTER_SET_CONNECTION) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		ci = proxysql_find_charset_nr(atoi(session->mysql_variables->client_get_value(SQL_CHARACTER_SET_CONNECTION)));
 
 		unsigned int nr = ci->nr;
-		if ( ci->nr == 45 && session->mybe->server_myds->myconn->mysql->server_version[0] == '8')
-			nr = 255; // hardcoded to avoid quering from information_schema.collations
-
 		std::stringstream ss;
 		ss << nr;
 		session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
+		ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, ci->csname, no_quote, st);
+	} else if (idx==SQL_CHARACTER_SET_CLIENT || idx==SQL_CHARACTER_SET_DATABASE) {
+		const MARIADB_CHARSET_INFO *ci = NULL;
+		ci = proxysql_find_charset_nr(atoi(session->mysql_variables->client_get_value(idx)));
+
+		std::stringstream ss;
+		ss << ci->nr;
 		ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, ci->csname, no_quote, st);
 	} else {
 		ret = session->handler_again___status_SETTING_GENERIC_VARIABLE(&_rc, set_var_name, session->mysql_variables->server_get_value(idx), no_quote, st);
@@ -259,6 +255,7 @@ bool Names_Updater::verify_variables(MySQL_Session* session, int idx) {
 
 		if (ret && !strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "1")) {
 			session->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+			session->mysql_variables->client_set_value(SQL_CHARACTER_SET_CLIENT, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			session->mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			if ( !strcmp("45", session->mysql_variables->server_get_value(SQL_CHARACTER_SET)) && session->mybe->server_myds->myconn->mysql->server_version[0] == '8') {
 				session->mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, "255");
@@ -270,6 +267,7 @@ bool Names_Updater::verify_variables(MySQL_Session* session, int idx) {
 		}
 		if (ret && !strcmp(session->client_myds->myconn->variables[SQL_CHARACTER_ACTION].value, "3")) {
 			session->mysql_variables->server_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+			session->mysql_variables->server_set_value(SQL_CHARACTER_SET_CLIENT, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			session->mysql_variables->server_set_value(SQL_CHARACTER_SET_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			session->mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 			return ret;
@@ -309,6 +307,7 @@ bool Charset_Updater::verify_variables(MySQL_Session* session, int idx) {
 	if (ret) {
 		const MARIADB_CHARSET_INFO *ci = NULL;
 		session->mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
+		session->mysql_variables->client_set_value(SQL_CHARACTER_SET_CLIENT, session->mysql_variables->server_get_value(SQL_CHARACTER_SET));
 		return ret;
 	}
 
