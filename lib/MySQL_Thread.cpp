@@ -1553,7 +1553,7 @@ char * MySQL_Threads_Handler::get_variable(char *name) {	// this is the public f
 
 
 
-bool MySQL_Threads_Handler::set_variable(char *name, char *value) {	// this is the public function, accessible from admin
+bool MySQL_Threads_Handler::set_variable(char *name, const char *value) {	// this is the public function, accessible from admin
 	// IN:
 	// name: variable name
 	// value: variable value
@@ -2401,7 +2401,6 @@ bool MySQL_Threads_Handler::set_variable(char *name, char *value) {	// this is t
 		}
 		return true;
 	}
-
 
 	for (int i=0; i<SQL_NAME_LAST; i++) {
 		char buf[128];
@@ -3271,6 +3270,7 @@ MySQL_Session * MySQL_Thread::create_new_session_and_client_data_stream(int _fd)
 
 	sess->client_myds->myprot.init(&sess->client_myds, sess->client_myds->myconn->userinfo, sess);
 
+	proxy_warning("TRACE : new_client\n");
 	for (int i=0; i<SQL_NAME_LAST; i++) {
 		if (i == SQL_CHARACTER_SET || i == SQL_CHARACTER_SET_RESULTS ||
 			i == SQL_CHARACTER_SET_CONNECTION || i == SQL_CHARACTER_SET_CLIENT ||

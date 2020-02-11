@@ -1300,6 +1300,9 @@ bool MySQL_Session::handler_special_queries(PtrSize_t *pkt) {
 			client_myds->myconn->set_charset(c->nr, NAMES);
 			std::stringstream ss;
 			ss << c->nr;
+			/* here we received request from client (this is not multiplexing)
+			 * we should remember charsets that client requested for future use in verification, multiplexing etc.
+			 */
 			mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
 			mysql_variables->client_set_value(SQL_CHARACTER_SET_CLIENT, ss.str().c_str());
 			mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
@@ -2159,8 +2162,7 @@ bool MySQL_Session::handler_again___status_SETTING_GENERIC_VARIABLE(int *_rc, co
 		query=NULL;
 	}
 	if (rc==0) {
-		if (!strcmp("character_set_results", var_name))
-			proxy_warning("TRACE : END SET VAR %s value %s\n", var_name, var_value);
+		proxy_warning("TRACE : END SET VAR %s value %s\n", var_name, var_value);
 		myds->revents|=POLLOUT;	// we also set again POLLOUT to send a query immediately!
 		myds->DSS = STATE_MARIADB_GENERIC;
 		st=previous_status.top();
@@ -5277,12 +5279,18 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 								} else {
 									std::stringstream ss;
 									ss << ci->nr;
+									/* changing collation_connection the character_set_connection will be changed as well
+									 * and vice versa
+									 */
 									if (var == "collation_connection")
 										mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
 									if (var == "character_set_connection") {
 											mysql_variables->client_set_value(SQL_COLLATION_CONNECTION, ss.str().c_str());
 									}
 
+									/* this is explicit statement from client. we do not multiplex, therefor we must
+									 * remember client's choice in the client's variable for future use in verifications, multiplexing etc.
+									 */
 									mysql_variables->client_set_value(idx, ss.str().c_str());
 									proxy_debug(PROXY_DEBUG_MYSQL_COM, 5, "Changing connection %s to %s\n", var.c_str(), value1.c_str());
 								}
@@ -5329,9 +5337,13 @@ bool MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 							return true;
 						} else {
 							proxy_debug(PROXY_DEBUG_MYSQL_COM, 8, "Changing connection charset to %d\n", c->nr);
+							/* this is not multiplexing */
 							client_myds->myconn->set_charset(c->nr, NAMES);
 							std::stringstream ss;
 							ss << c->nr;
+							/* client explicitly asked to change charset. we must remember this values in client variables 
+							 * for future use in verification of separate 'set character_set_%' commands
+							 */
 							mysql_variables->client_set_value(SQL_CHARACTER_SET_RESULTS, ss.str().c_str());
 							mysql_variables->client_set_value(SQL_CHARACTER_SET_CLIENT, ss.str().c_str());
 							mysql_variables->client_set_value(SQL_CHARACTER_SET_CONNECTION, ss.str().c_str());
@@ -5929,20 +5941,30 @@ void MySQL_Session::handler___client_DSS_QUERY_SENT___server_DSS_NOT_INITIALIZED
 			proxy_warning("TRACE : variable name %24s\tclient value [%5s]\tserver value [%5s]\n", mysql_tracked_variables[i].set_variable_name, mysql_variables->client_get_value(i), mysql_variables->server_get_value(i)); 
 		}
 
+		/* if this is not 'set character set' command then set action to multiplexing *
+		 * TODO: Find better value for SQL_CHARACTER_ACTION for multiplexing
+		 */
 		if (strcmp("2", mysql_variables->client_get_value(SQL_CHARACTER_ACTION))) {
 			mysql_variables->server_set_value(SQL_CHARACTER_ACTION, "0");
 			mysql_variables->client_set_value(SQL_CHARACTER_ACTION, "0");
 		}
 
+		/* This is the case when client used 'set charcater_set_connection=%' to set this variable separately
+		 * We cannot overwrite this value with 'set names' during multiplexing, so we have to remember it in the server variable
+		 */
 		if (strcmp(mysql_variables->client_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_COLLATION_CONNECTION))) {
 			mysql_variables->server_set_value(SQL_COLLATION_CONNECTION, mysql_variables->client_get_value(SQL_CHARACTER_SET));
 			mysql_variables->server_set_value(SQL_CHARACTER_SET_CONNECTION, mysql_variables->client_get_value(SQL_CHARACTER_SET));
 		}
 
+		/* similar to the previous case: client used ;set character_set_results=%' to set this variable separately.
+		 * before executing 'set names' we should store its value in the server variable
+		 */
 		if (strcmp(mysql_variables->client_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_CHARACTER_SET_RESULTS))) {
 			mysql_variables->server_set_value(SQL_CHARACTER_SET_RESULTS, mysql_variables->client_get_value(SQL_CHARACTER_SET));
 		}
 
+		/* same for client variable */
 		if (strcmp(mysql_variables->client_get_value(SQL_CHARACTER_SET), mysql_variables->client_get_value(SQL_CHARACTER_SET_CLIENT))) {
 			mysql_variables->server_set_value(SQL_CHARACTER_SET_CLIENT, mysql_variables->client_get_value(SQL_CHARACTER_SET));
 		}

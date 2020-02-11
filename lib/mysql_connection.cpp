@@ -573,6 +573,7 @@ void MySQL_Connection::connect_start() {
 	unsigned int timeout= 1;
 	const char *csname = NULL;
 	mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT, (void *)&timeout);
+	/* Take client character set and use it to connect to backend */
 	if (myds && myds->sess) {
 		csname = myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_SET);
 	}
@@ -588,8 +589,7 @@ void MySQL_Connection::connect_start() {
 		assert(0);
 	}
 	proxy_warning("TRACE : INITIAL ACTION client %s, server %s\n", myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_ACTION), myds->sess->mysql_variables->server_get_value(SQL_CHARACTER_ACTION));
-	set_charset(c->nr, (charset_action)atoi(myds->sess->mysql_variables->client_get_value(SQL_CHARACTER_ACTION)));
-	//set_charset(c->nr, CONNECT_START);
+	set_charset(c->nr, CONNECT_START);
 	mysql_options(mysql, MYSQL_SET_CHARSET_NAME, c->csname);
 	unsigned long client_flags = 0;
 	//if (mysql_thread___client_found_rows)
@@ -1764,6 +1764,7 @@ int MySQL_Connection::async_set_names(short event, unsigned int c) {
 			return -1;
 			break;
 		case ASYNC_IDLE:
+			/* useless statement. should be removed after thorough testing */
 			//set_charset(c, CONNECT_START);
 			async_state_machine=ASYNC_SET_NAMES_START;
 		default:
